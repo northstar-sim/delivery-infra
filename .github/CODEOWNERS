@@ -1,0 +1,4 @@
+* @northstar-sim/engineering-leads
+/src/ @northstar-sim/platform
+/.github/ @northstar-sim/platform
+/package*.json @northstar-sim/security

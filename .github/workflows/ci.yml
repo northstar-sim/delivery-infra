@@ -1,0 +1,36 @@
+name: CI
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm test
+  staging:
+    needs: test
+    environment: staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir -p release && cp -R src package.json release/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: staging-release
+          path: release
+  production:
+    if: github.ref == 'refs/heads/main'
+    needs: staging
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: staging-release
+          path: release
+      - run: test -f release/package.json && echo 'Release package verified; local Docker runtime deployment is reported separately.'
