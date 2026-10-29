@@ -1,6 +1,6 @@
 # delivery-infra runbook
 
-Health check: `node scripts/check-health.js <url>/health`. It exits 0 only for HTTP 200 with JSON `{"status":"ok"}` within 3 seconds. Anything else exits 1: non-200, invalid JSON, `status:"degraded"`, a timeout, or a connection failure.
+Health check: `node scripts/check-health.js <url>/health`. It exits 0 only for HTTP 200 with JSON `{"status":"ok"}` within 2 seconds per attempt (override with `HEALTHCHECK_TIMEOUT_MS`). It makes one retry, so a failing endpoint can take up to about 4 seconds to exit 1. Anything else exits 1: non-200, invalid JSON, `status:"degraded"`, a timeout, or a connection failure.
 
 ## Staging health gate
 

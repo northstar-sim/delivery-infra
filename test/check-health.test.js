@@ -20,9 +20,9 @@ function reply(statusCode, body) {
   return (req, res) => { res.statusCode = statusCode; res.end(body); };
 }
 
-function runCli(args) {
+function runCli(args, env = {}) {
   return new Promise((resolve) => {
-    execFile(process.execPath, [CLI, ...args], (err, stdout, stderr) => {
+    execFile(process.execPath, [CLI, ...args], { env: { ...process.env, ...env } }, (err, stdout, stderr) => {
       resolve({ code: err ? err.code : 0, stdout, stderr });
     });
   });
@@ -79,8 +79,43 @@ test('exits 1 without a URL argument or with a non-HTTP URL', async () => {
   assert.equal((await runCli(['file:///etc/passwd'])).code, 1);
 });
 
-test('default timeout is 3 seconds', () => {
-  assert.equal(DEFAULT_TIMEOUT_MS, 3000);
+test('default timeout is 2 seconds', () => {
+  assert.equal(DEFAULT_TIMEOUT_MS, 2000);
+});
+
+test('retries once after a 503 and passes when the retry succeeds', async () => {
+  let calls = 0;
+  const srv = await fixture((req, res) => {
+    calls += 1;
+    res.statusCode = calls === 1 ? 503 : 200;
+    res.end(JSON.stringify({ status: 'ok' }));
+  });
+  try {
+    const result = await checkHealth(srv.url);
+    assert.equal(result.ok, true);
+    assert.equal(calls, 2);
+  } finally { await srv.close(); }
+});
+
+test('makes exactly two attempts when every attempt fails', async () => {
+  let calls = 0;
+  const srv = await fixture((req, res) => { calls += 1; res.statusCode = 503; res.end('{}'); });
+  try {
+    const result = await checkHealth(srv.url);
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /HTTP 503/);
+    assert.equal(calls, 2);
+  } finally { await srv.close(); }
+});
+
+test('HEALTHCHECK_TIMEOUT_MS overrides the CLI timeout', async () => {
+  const srv = await fixture(() => {});
+  try {
+    const started = Date.now();
+    const r = await runCli([srv.url], { HEALTHCHECK_TIMEOUT_MS: '200' });
+    assert.equal(r.code, 1);
+    assert.ok(Date.now() - started < 1500, `elapsed ${Date.now() - started}ms`);
+  } finally { await srv.close(); }
 });
 
 test('times out on a hanging server within the bound', async () => {
@@ -94,14 +129,14 @@ test('times out on a hanging server within the bound', async () => {
   } finally { await srv.close(); }
 });
 
-test('CLI gives up on a hanging server after about 3 seconds', async () => {
+test('CLI gives up on a hanging server after two 2-second attempts', async () => {
   const srv = await fixture(() => {});
   try {
     const started = Date.now();
     const r = await runCli([srv.url]);
     const elapsed = Date.now() - started;
     assert.equal(r.code, 1);
-    assert.ok(elapsed >= 2900 && elapsed < 5000, `elapsed ${elapsed}ms`);
+    assert.ok(elapsed >= 3900 && elapsed < 6000, `elapsed ${elapsed}ms`);
   } finally { await srv.close(); }
 });
 
