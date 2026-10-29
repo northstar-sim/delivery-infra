@@ -28,3 +28,22 @@ Health check: `node scripts/check-health.js <url>/health`. It exits 0 only for H
 2. **Investigate:** check recent deploys and config changes, including whether `SIMULATE_FAILURE` was set by accident. Then check the service logs and dependencies. Roll back first if a recent release is the likely cause.
 3. **Resolve:** apply the rollback or fix. Confirm the production health gate exits 0 and impact has stopped, then announce the resolution with a timestamp.
 4. **Postmortem:** within 5 business days, write a blameless postmortem. Cover the timeline, root cause, detection, what went well and what didn't, and action items with owners and due dates.
+
+## Rollback and incident ownership
+
+**Owner:** the on-call engineer on the PagerDuty service "Northstar infra" owns every production incident until it is resolved. They name an incident lead if someone else should run it. Staging gate failures don't page anyone; the candidate just stays unpromoted.
+
+**When to page** the "Northstar infra" service:
+
+- The production health gate exits 1 after a release, or at any other time.
+- `SIMULATE_FAILURE` is found set in production.
+
+**Rollback steps.** This repo has no rollback script. The only script is `scripts/check-health.js`.
+
+1. Get the production revision recorded before the release. If none was recorded, page the incident lead before you guess.
+2. Redeploy that revision from its existing release artifact or image. Don't rebuild it.
+3. Run `node scripts/check-health.js https://<production-host>/health`. It must exit 0.
+4. Post the rollback and the health check output in the incident channel.
+5. Fix forward or revert through a normal PR. It must pass the staging gate before it returns to production.
+
+For the full gate and postmortem details, see "Rollback to the prior revision" and "Incident response" above.
